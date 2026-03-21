@@ -22,9 +22,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-app.use("/",()=>{
-  console.log('인덱스');
-})
+
 app.use("/households", households);
 app.use("/import", importRouter);
 app.use("/survey", surveyRouter);
