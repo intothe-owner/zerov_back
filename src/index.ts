@@ -12,11 +12,7 @@ import WorkReportRouter from "./routes/workReports";
 const app = express();
 const corsOptions: cors.CorsOptions = { 
   origin: [
-    'http://localhost:3000',
-    'http://113.131.151.103:8088',
     'http://3.37.214.42',
-    'http://www.syconsulting.co.kr',
-    'http://syconsulting.co.kr'
   ],
   credentials: true,
   methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
