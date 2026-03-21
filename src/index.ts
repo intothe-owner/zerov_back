@@ -48,7 +48,7 @@ async function bootstrap() {
       console.log("ℹ️ DB_SYNC_MODE=none (sync 생략)");
     }
 
-    const PORT = Number(process.env.PORT || 8080);
+    const PORT = Number(process.env.PORT || 3000);
     app.listen(PORT, () => {
       console.log(`✅ Server listening on http://localhost:${PORT}`);
     });
