@@ -69,6 +69,7 @@ function deleteOldFile(filePath?: string | null) {
  * GET /households/list
  */
 router.get("/list", async (req: Request, res: Response) => {
+  console.log('리스트');
   try {
     const page = Math.max(1, Number(req.query.page ?? 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 20)));
