@@ -97,7 +97,9 @@ function validateSaveSurveyBody(body: any): { ok: true } | { ok: false; message:
 //서명 저장
 const signatureUploadDir = path.resolve(process.cwd(), "uploads", "survey-signatures");
 fs.mkdirSync(signatureUploadDir, { recursive: true });
-
+function isBase64SignatureDataUrl(value: string) {
+  return /^data:image\/png;base64,/.test(value);
+}
 function saveBase64Signature(base64: string, householdId: number) {
   const match = base64.match(/^data:image\/png;base64,(.+)$/);
   if (!match) {
@@ -367,18 +369,19 @@ router.post("/submit", async (req: Request, res: Response) => {
     }
 
     // 기존 서명 우선 확인
-    let signaturePath = household.surveySignature ?? null;
+let signaturePath = household.surveySignature ?? null;
 
-    // 새 서명이 들어오면 새 파일로 저장해서 덮어씀
-    if (signatureDataUrl) {
-      signaturePath = saveBase64Signature(signatureDataUrl, householdId);
-    }
+// 새로 그린 base64 서명일 때만 파일 저장
+if (signatureDataUrl && isBase64SignatureDataUrl(signatureDataUrl)) {
+  signaturePath = saveBase64Signature(signatureDataUrl, householdId);
+}
 
-    // 새 서명도 없고, 기존 서명도 없으면 실패
-    if (!signaturePath) {
-      await tx.rollback();
-      return res.status(400).json({ message: "서명을 입력해 주세요." });
-    }
+// 프론트가 기존 서명 URL(http://..., /uploads/...)을 보내는 경우는
+// 새 저장 없이 기존 서명 재사용
+if (!signaturePath) {
+  await tx.rollback();
+  return res.status(400).json({ message: "서명을 입력해 주세요." });
+}
 
     household.surveySignature = signaturePath;
     household.surveySubmittedAt = new Date();
