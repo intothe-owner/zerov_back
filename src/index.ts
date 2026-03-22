@@ -17,8 +17,8 @@ const corsOptions: cors.CorsOptions = {
   credentials: true,
   methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
 };
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 app.use(cors(corsOptions));
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 app.use(express.json());
 app.use(cookieParser());
 
