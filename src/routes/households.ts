@@ -166,14 +166,19 @@ router.get("/list", async (req: Request, res: Response) => {
  * - afterImage: 1장
  */
 router.put("/:id/photos", (req: Request, res: Response) => {
+  console.log("사진 업로드 요청 도착:", req.method, req.originalUrl);
+
   photoUpload(req, res, async (uploadErr: any) => {
     try {
       if (uploadErr) {
+        console.error("multer 업로드 에러:", uploadErr);
         return res.status(400).json({
           message: "photo upload failed",
           error: uploadErr?.message ?? String(uploadErr),
         });
       }
+
+      console.log("req.files:", req.files);
 
       const id = Number(req.params.id);
 
@@ -204,18 +209,10 @@ router.put("/:id/photos", (req: Request, res: Response) => {
         });
       }
 
-      if (addressImageFile && item.addressImage) {
-        deleteOldFile(item.addressImage);
-      }
-      if (beforeImageFile && item.beforeImage) {
-        deleteOldFile(item.beforeImage);
-      }
-      if (duringImageFile && item.duringImage) {
-        deleteOldFile(item.duringImage);
-      }
-      if (afterImageFile && item.afterImage) {
-        deleteOldFile(item.afterImage);
-      }
+      if (addressImageFile && item.addressImage) deleteOldFile(item.addressImage);
+      if (beforeImageFile && item.beforeImage) deleteOldFile(item.beforeImage);
+      if (duringImageFile && item.duringImage) deleteOldFile(item.duringImage);
+      if (afterImageFile && item.afterImage) deleteOldFile(item.afterImage);
 
       if (addressImageFile) item.addressImage = toPublicPath(addressImageFile);
       if (beforeImageFile) item.beforeImage = toPublicPath(beforeImageFile);
@@ -237,7 +234,7 @@ router.put("/:id/photos", (req: Request, res: Response) => {
         },
       });
     } catch (err: any) {
-      console.error(err);
+      console.error("사진 업로드 내부 에러:", err);
       return res.status(500).json({
         message: "failed to upload photos",
         error: err?.message ?? String(err),
