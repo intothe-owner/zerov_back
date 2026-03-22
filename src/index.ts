@@ -40,7 +40,7 @@ app.use((req, _res, next) => {
 });
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 app.use(express.json());
