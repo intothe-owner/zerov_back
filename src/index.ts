@@ -13,6 +13,7 @@ import WorkReportRouter from "./routes/workReports";
 const app = express();
 
 const allowedOrigins = [
+  "http://localhost:3000",
   "http://3.37.214.42",
   "http://3.37.214.42:3000",
 ];

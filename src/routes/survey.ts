@@ -312,7 +312,7 @@ router.post("/submit", async (req: Request, res: Response) => {
     const surveyMonth = Number(body.surveyMonth);
     const surveyDay = Number(body.surveyDay);
     const surveyName = String(body.surveyName ?? "").trim();
-    const signatureDataUrl = String(body.signatureDataUrl ?? "");
+    const signatureDataUrl = String(body.signatureDataUrl ?? "").trim();
     const answers = Array.isArray(body.answers) ? body.answers : [];
 
     if (!Number.isInteger(householdId) || householdId <= 0) {
@@ -338,11 +338,6 @@ router.post("/submit", async (req: Request, res: Response) => {
     if (!surveyDay || surveyDay < 1 || surveyDay > 31) {
       await tx.rollback();
       return res.status(400).json({ message: "일 정보가 올바르지 않습니다." });
-    }
-
-    if (!signatureDataUrl) {
-      await tx.rollback();
-      return res.status(400).json({ message: "서명을 입력해 주세요." });
     }
 
     const survey = await Survey.findOne({
@@ -371,7 +366,19 @@ router.post("/submit", async (req: Request, res: Response) => {
       return res.status(404).json({ message: "대상자를 찾을 수 없습니다." });
     }
 
-    const signaturePath = saveBase64Signature(signatureDataUrl, householdId);
+    // 기존 서명 우선 확인
+    let signaturePath = household.surveySignature ?? null;
+
+    // 새 서명이 들어오면 새 파일로 저장해서 덮어씀
+    if (signatureDataUrl) {
+      signaturePath = saveBase64Signature(signatureDataUrl, householdId);
+    }
+
+    // 새 서명도 없고, 기존 서명도 없으면 실패
+    if (!signaturePath) {
+      await tx.rollback();
+      return res.status(400).json({ message: "서명을 입력해 주세요." });
+    }
 
     household.surveySignature = signaturePath;
     household.surveySubmittedAt = new Date();
