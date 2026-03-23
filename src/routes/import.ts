@@ -4,6 +4,7 @@ import XLSX from "xlsx";
 import { Transaction } from "sequelize";
 import { sequelize } from "../db/sequelize";
 import { CleanUpHousehold, ListType } from "../models/CleanUpHousehold";
+import { getCoordsByAddress } from "../utils/geocoder";
 
 const router = Router();
 
@@ -54,6 +55,8 @@ type ParsedRow = {
   proxyPhone: string | null;
   roadAddress: string;
   detailAddress: string | null;
+  latitude: number | null;  // 추가
+  longitude: number | null; // 추가
   rank: number;
   totalScore: number;
   scoreHouseholdSize: number | null;
@@ -127,7 +130,7 @@ function toSafeText(value: unknown): string {
  * 실제 업로드 파일 기준 헤더 alias
  */
 const HEADER_ALIASES: Record<
-  keyof Omit<ParsedRow, "programYear" | "listType">,
+  keyof Omit<ParsedRow, "programYear" | "listType" | "latitude" | "longitude">,
   string[]
 > = {
   localNo: [
@@ -246,7 +249,7 @@ const HEADER_ALIASES: Record<
     "거주기간점수",
   ],
 
-  scoreBenefitType: [
+  scoreBenefitType: [ 
     "수급형태(20점)",
     "수급형태(10점)",
     "수급형태점수",
@@ -409,10 +412,13 @@ function mapRowToEntity(
     proxyPhone: nullableString(getValue("proxyPhone")),
     roadAddress: cleanString(getValue("roadAddress")),
     detailAddress: nullableString(getValue("detailAddress")),
+    // 추가된 부분: 초기값은 null로 설정 (이후 루프에서 API 호출 후 채워짐)
+    latitude: null,
+    longitude: null,
     rank,
     totalScore: totalScore ?? 0,
     scoreHouseholdSize: toNumber(getValue("scoreHouseholdSize")),
-    scoreAge: toNumber(getValue("scoreAge")),
+    scoreAge: toNumber(getValue("scoreAge")), 
     scoreDisability: toNumber(getValue("scoreDisability")),
     scoreResidencePeriod: toNumber(getValue("scoreResidencePeriod")),
     scoreBenefitType: toNumber(getValue("scoreBenefitType")),
@@ -490,18 +496,22 @@ router.post(
       const parsedRows: ParsedRow[] = [];
       const errors: string[] = [];
 
-      rawRows.forEach((row, index) => {
-        const rowNumber = index + 2;
+      // 순차적으로 좌표를 가져오기 위해 for...of 문 사용 (API 과부하 방지)
+for (const [index, row] of rawRows.entries()) {
+  const rowNumber = index + 2;
+  try {
+    const entity = mapRowToEntity(row, headers, programYear, listType, rowNumber);
+    
+    // 주소를 좌표로 변환 (추가된 부분)
+    const coords = await getCoordsByAddress(entity.roadAddress);
+    entity.latitude = coords.latitude;
+    entity.longitude = coords.longitude;
 
-        try {
-          const entity = mapRowToEntity(row, headers, programYear, listType, rowNumber);
-          parsedRows.push(entity);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : `${rowNumber}행 파싱 실패`;
-          errors.push(message);
-        }
-      });
+    parsedRows.push(entity);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : `${rowNumber}행 처리 실패`);
+  }
+}
 
       if (!parsedRows.length) {
         return res.status(400).json({
@@ -546,6 +556,8 @@ router.post(
             scoreOther: row.scoreOther,
             otherReason: row.otherReason,
             remark: row.remark,
+            latitude: row.latitude,
+    longitude: row.longitude,
             // airconType: row.airconType, // 모델 추가 후 활성화
           })),
           {

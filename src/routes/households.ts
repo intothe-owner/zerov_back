@@ -71,80 +71,42 @@ function deleteOldFile(filePath?: string | null) {
 router.get("/list", async (req: Request, res: Response) => {
   console.log('리스트');
   try {
-    const page = Math.max(1, Number(req.query.page ?? 1));
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 20)));
-    const q = String(req.query.q ?? "").trim();
+    const { 
+      page = 1, 
+      pageSize = 20, 
+      q = "", 
+      group = "", 
+      sort = "localNo", 
+      order = "asc",
+      isArchived // 프론트에서 보낸 보관함 여부 (true/false)
+    } = req.query;
+    const where: WhereOptions = {};
+    // 1. 보관함 필터링 추가 (매우 중요)
+    // 쿼리 스트링은 문자열로 들어오므로 비교 처리가 필요합니다.
+    where.isArchived = isArchived === "true"; 
 
-    const group = String(req.query.group ?? "").trim();
-
-    const sort = String(req.query.sort ?? "localNo");
-    const orderRaw = String(req.query.order ?? "asc").toLowerCase();
-    const order: "ASC" | "DESC" = orderRaw === "desc" ? "DESC" : "ASC";
-
-    const sortField =
-      sort === "dong" ? "dong" : sort === "localNo" ? "localNo" : "localNo";
-
-    const andConds: any[] = [];
-
-    if (group === "senior") {
-      andConds.push({ id: { [Op.gte]: 376 } });
-    } else if (group === "vulnerable") {
-      andConds.push({ id: { [Op.lte]: 375 } });
-    }
-
+    // 2. 기존 검색 로직 (이름 검색 등)
     if (q) {
-      andConds.push({
-        [Op.or]: [
-          { name: { [Op.like]: `%${q}%` } },
-          { phone: { [Op.like]: `%${q}%` } },
-          { proxyPhone: { [Op.like]: `%${q}%` } },
-          { roadAddress: { [Op.like]: `%${q}%` } },
-        ],
-      });
+      where.name = { [Op.like]: `%${q}%` };
     }
-
-    const where: WhereOptions = andConds.length ? { [Op.and]: andConds } : {};
-    const offset = (page - 1) * pageSize;
+    
 
     const { rows, count } = await CleanUpHousehold.findAndCountAll({
       where,
-      attributes: [
-        "id",
-        "localNo",
-        "dong",
-        "name",
-        "phone",
-        "proxyPhone",
-        "roadAddress",
-        "detailAddress",
-      ],
-      order: [
-        [sortField as any, order],
-        ...(sortField === "dong" ? [["localNo", "ASC"] as any] : []),
-        ["id", "ASC"],
-      ],
-      limit: pageSize,
-      offset,
+      limit: Number(pageSize),
+      offset: (Number(page) - 1) * Number(pageSize),
+      order: [[String(sort), String(order).toUpperCase()]],
     });
 
     return res.json({
-      items: rows.map((r: any) => ({
-        id: r.id,
-        no: r.localNo,
-        dong: r.dong,
-        name: r.name,
-        phone: r.phone,
-        proxyPhone: r.proxyPhone,
-        roadAddress: r.roadAddress,
-        detailAddress: r.detailAddress,
-      })),
+      items: rows,
       pagination: {
-        page,
-        pageSize,
+        page: Number(page),
+        pageSize: Number(pageSize),
         total: count,
-        totalPages: Math.ceil(count / pageSize),
+        totalPages: Math.ceil(count / Number(pageSize)),
       },
-      sort: { field: sortField, order },
+      sort: { field: sort, order },
       query: q,
       group,
     });
@@ -337,5 +299,30 @@ router.get("/:id", async (req: Request, res: Response) => {
     });
   }
 });
+/**
+ * 가구 보관함 이동 API
+ * PATCH /api/households/:id/archive
+ */
+router.patch("/:id/archive", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
+    const household = await CleanUpHousehold.findByPk(id);
+
+    if (!household) {
+      return res.status(404).json({ ok: false, message: "해당 데이터를 찾을 수 없습니다." });
+    }
+    // 보관 상태 업데이트
+    await household.update({ isArchived: !household.isArchived });
+
+    return res.status(200).json({
+      ok: true,
+      message: "보관함으로 이동되었습니다.",
+      id: household.id
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ ok: false, message: "서버 오류가 발생했습니다." });
+  }
+});
 export default router;

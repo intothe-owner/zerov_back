@@ -54,7 +54,10 @@ export class CleanUpHousehold extends Model<
   declare surveySignature: string | null;
   declare surveySubmittedAt: Date | null;
   declare surveySubmittedByName: string | null;
-
+  // 좌표값 컬럼 추가
+  declare latitude: number | null;  // 위도
+  declare longitude: number | null; // 경도
+  declare isArchived: CreationOptional<boolean>; // 추가
 }
 
 CleanUpHousehold.init(
@@ -262,6 +265,25 @@ CleanUpHousehold.init(
       allowNull: true,
       field: "survey_submitted_by_name",
       comment: "설문 제출 성명",
+    },
+    // 위도 추가
+    latitude: {
+      type: DataTypes.DECIMAL(10, 8),
+      allowNull: true,
+      comment: "위도",
+    },
+    // 경도 추가
+    longitude: {
+      type: DataTypes.DECIMAL(11, 8),
+      allowNull: true,
+      comment: "경도",
+    },
+    isArchived: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: "is_archived",
+      comment: "보관함 이동 여부",
     },
   },
   {
