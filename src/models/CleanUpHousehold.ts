@@ -58,6 +58,7 @@ export class CleanUpHousehold extends Model<
   declare latitude: number | null;  // 위도
   declare longitude: number | null; // 경도
   declare isArchived: CreationOptional<boolean>; // 추가
+  declare routeOrder: number; // 추가
 }
 
 CleanUpHousehold.init(
@@ -284,6 +285,12 @@ CleanUpHousehold.init(
       defaultValue: false,
       field: "is_archived",
       comment: "보관함 이동 여부",
+    },
+    routeOrder: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      field: "route_order", // DB 컬럼명
     },
   },
   {

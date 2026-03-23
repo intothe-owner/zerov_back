@@ -4,6 +4,7 @@ import { CleanUpHousehold } from "../models/CleanUpHousehold";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import { sequelize } from "../db/sequelize";
 
 const router = Router();
 
@@ -81,6 +82,7 @@ router.get("/list", async (req: Request, res: Response) => {
       isArchived // 프론트에서 보낸 보관함 여부 (true/false)
     } = req.query;
     const where: WhereOptions = {};
+    const isTodayRoute = isArchived === "true";
     // 1. 보관함 필터링 추가 (매우 중요)
     // 쿼리 스트링은 문자열로 들어오므로 비교 처리가 필요합니다.
     where.isArchived = isArchived === "true"; 
@@ -95,7 +97,9 @@ router.get("/list", async (req: Request, res: Response) => {
       where,
       limit: Number(pageSize),
       offset: (Number(page) - 1) * Number(pageSize),
-      order: [[String(sort), String(order).toUpperCase()]],
+      order: isTodayRoute 
+        ? [['routeOrder', 'ASC']] 
+        : [[String(sort), String(order).toUpperCase()]],
     });
 
     return res.json({
@@ -304,25 +308,95 @@ router.get("/:id", async (req: Request, res: Response) => {
  * PATCH /api/households/:id/archive
  */
 router.patch("/:id/archive", async (req: Request, res: Response) => {
+  const tx = await sequelize.transaction(); // 순서 일관성을 위해 트랜잭션 시작
   try {
     const { id } = req.params;
 
     const household = await CleanUpHousehold.findByPk(id);
 
     if (!household) {
+      await tx.rollback();
       return res.status(404).json({ ok: false, message: "해당 데이터를 찾을 수 없습니다." });
     }
-    // 보관 상태 업데이트
-    await household.update({ isArchived: !household.isArchived });
+
+    const wasArchived = household.isArchived;
+    const currentOrder = household.routeOrder;
+
+    if (wasArchived) {
+      // [CASE 1: 보관함 해제]
+      // 1. 현재 항목 해제 (isArchived: false, routeOrder: 0)
+      await household.update({ isArchived: false, routeOrder: 0 }, { transaction: tx });
+
+      // 2. 빠진 번호 뒤의 항목들 순서를 하나씩 당김 (routeOrder = routeOrder - 1)
+      await CleanUpHousehold.update(
+        { routeOrder: sequelize.literal("route_order - 1") },
+        {
+          where: {
+            isArchived: true,
+            routeOrder: { [Op.gt]: currentOrder }, // 나보다 순서가 컸던 항목들만
+          },
+          transaction: tx,
+        }
+      );
+    } else {
+      // [CASE 2: 보관함 추가]
+      // 1. 현재 보관함의 마지막 순번 확인
+      const maxOrder = await CleanUpHousehold.max("routeOrder", {
+        where: { isArchived: true },
+      });
+
+      // 2. 마지막 순번 + 1로 추가
+      await household.update(
+        { isArchived: true, routeOrder: (Number(maxOrder) || 0) + 1 },
+        { transaction: tx }
+      );
+    }
+
+    await tx.commit();
 
     return res.status(200).json({
       ok: true,
-      message: "보관함으로 이동되었습니다.",
-      id: household.id
+      message: wasArchived ? "보관함에서 제거되었습니다." : "보관함으로 이동되었습니다.",
+      id: household.id,
     });
   } catch (error) {
+    if (tx) await tx.rollback();
     console.error(error);
     return res.status(500).json({ ok: false, message: "서버 오류가 발생했습니다." });
+  }
+});
+
+/**
+ * 보관함 내 동선 순서 변경 API (Swap 방식)
+ * PATCH /api/households/reorder
+ */
+router.patch("/reorder", async (req: Request, res: Response) => {
+  const tx = await sequelize.transaction();
+  try {
+    const { dragId, dropId } = req.body; // 바꿀 두 아이템의 ID
+    console.log(req.body);
+
+    const itemA = await CleanUpHousehold.findByPk(dragId);
+    const itemB = await CleanUpHousehold.findByPk(dropId);
+
+    if (!itemA || !itemB) {
+      return res.status(404).json({ ok: false, message: "항목을 찾을 수 없습니다." });
+    }
+
+    // 두 항목의 routeOrder 값을 서로 바꿈
+    const tempOrder = itemA.routeOrder;
+    itemA.routeOrder = itemB.routeOrder;
+    itemB.routeOrder = tempOrder;
+
+    await itemA.save({ transaction: tx });
+    await itemB.save({ transaction: tx });
+
+    await tx.commit();
+    return res.json({ ok: true, message: "순서가 변경되었습니다." });
+  } catch (err) {
+    await tx.rollback();
+    console.error(err);
+    return res.status(500).json({ ok: false, message: "순서 변경 중 오류 발생" });
   }
 });
 export default router;
