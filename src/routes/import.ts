@@ -68,6 +68,8 @@ type ParsedRow = {
   otherReason: string | null;
   remark: string | null;
   airconType: string | null; // 현재 모델에는 없음. 필요 시 모델 추가
+  isArchived:boolean | false;
+  routeOrder: number | 0;
 };
 
 /**
@@ -130,7 +132,7 @@ function toSafeText(value: unknown): string {
  * 실제 업로드 파일 기준 헤더 alias
  */
 const HEADER_ALIASES: Record<
-  keyof Omit<ParsedRow, "programYear" | "listType" | "latitude" | "longitude">,
+  keyof Omit<ParsedRow, "programYear" | "listType" | "latitude" | "longitude"| "isArchived" | "routeOrder">,
   string[]
 > = {
   localNo: [
@@ -426,6 +428,8 @@ function mapRowToEntity(
     otherReason: nullableString(getValue("otherReason")),
     remark: nullableString(getValue("remark")),
     airconType: nullableString(getValue("airconType")),
+    isArchived: false,
+    routeOrder:0
   };
 
   const missingFields: string[] = [];
@@ -557,7 +561,9 @@ for (const [index, row] of rawRows.entries()) {
             otherReason: row.otherReason,
             remark: row.remark,
             latitude: row.latitude,
-    longitude: row.longitude,
+            longitude: row.longitude,
+            isArchived:row.isArchived,
+            routeOrder:row.routeOrder,
             // airconType: row.airconType, // 모델 추가 후 활성화
           })),
           {
@@ -590,6 +596,8 @@ for (const [index, row] of rawRows.entries()) {
             scoreOther: row.scoreOther,
             otherReason: row.otherReason,
             remark: row.remark,
+            isArchived:row.isArchived,
+            routeOrder:row.routeOrder,
             // airconType: row.airconType, // 모델 추가 후 활성화
           })),
           {

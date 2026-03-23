@@ -57,8 +57,8 @@ export class CleanUpHousehold extends Model<
   // 좌표값 컬럼 추가
   declare latitude: number | null;  // 위도
   declare longitude: number | null; // 경도
-  declare isArchived: CreationOptional<boolean>; // 추가
-  declare routeOrder: number; // 추가
+  declare isArchived: CreationOptional<boolean> | false; // 추가
+  declare routeOrder: number | 0; // 추가
 }
 
 CleanUpHousehold.init(
