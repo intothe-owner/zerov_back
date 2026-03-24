@@ -59,6 +59,7 @@ export class CleanUpHousehold extends Model<
   declare longitude: number | null; // 경도
   declare isArchived: CreationOptional<boolean> | false; // 추가
   declare routeOrder: number | 0; // 추가
+  declare isComplete: boolean | false;//완료
 }
 
 CleanUpHousehold.init(
@@ -291,6 +292,13 @@ CleanUpHousehold.init(
       allowNull: false,
       defaultValue: 0,
       field: "route_order", // DB 컬럼명
+    },
+    isComplete: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: "is_complete",
+      comment: "작업완료여부",
     },
   },
   {

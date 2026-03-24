@@ -70,56 +70,52 @@ function deleteOldFile(filePath?: string | null) {
  * GET /households/list
  */
 router.get("/list", async (req: Request, res: Response) => {
-  console.log('리스트');
   try {
     const { 
       page = 1, 
       pageSize = 20, 
       q = "", 
-      group = "", 
-      sort = "localNo", 
-      order = "asc",
-      isArchived // 프론트에서 보낸 보관함 여부 (true/false)
+      isArchived,
+      isComplete // 프론트에서 보낼 작업완료 여부
     } = req.query;
-    const where: WhereOptions = {};
-    const isTodayRoute = isArchived === "true";
-    // 1. 보관함 필터링 추가 (매우 중요)
-    // 쿼리 스트링은 문자열로 들어오므로 비교 처리가 필요합니다.
-    where.isArchived = isArchived === "true"; 
 
-    // 2. 기존 검색 로직 (이름 검색 등)
+    const where: any = {};
+
+    // 탭 구분을 위한 로직
+    if (isComplete === "true") {
+      where.isComplete = true;
+    } else if (isArchived === "true") {
+      where.isArchived = true;
+      where.isComplete = false; // 동선에는 아직 완료 안 된 것만 표시
+    } else {
+      where.isArchived = false;
+      where.isComplete = false; // 일반 목록
+    }
+
     if (q) {
       where.name = { [Op.like]: `%${q}%` };
     }
-    
 
     const { rows, count } = await CleanUpHousehold.findAndCountAll({
       where,
       limit: Number(pageSize),
       offset: (Number(page) - 1) * Number(pageSize),
-      order: isTodayRoute 
-        ? [['routeOrder', 'ASC']] 
-        : [[String(sort), String(order).toUpperCase()]],
+      // 보관함이나 완료 목록은 최신순 혹은 지정 순서(routeOrder)로 정렬
+      order: isComplete === "true" 
+        ? [['updatedAt', 'DESC']] 
+        : (isArchived === "true" ? [['routeOrder', 'ASC']] : [['localNo', 'ASC']]),
     });
 
     return res.json({
       items: rows,
       pagination: {
         page: Number(page),
-        pageSize: Number(pageSize),
         total: count,
         totalPages: Math.ceil(count / Number(pageSize)),
       },
-      sort: { field: sort, order },
-      query: q,
-      group,
     });
-  } catch (err: any) {
-    console.error(err);
-    return res.status(500).json({
-      message: "failed to fetch households",
-      error: err?.message ?? String(err),
-    });
+  } catch (err) {
+    res.status(500).json({ message: "서버 오류" });
   }
 });
 
@@ -311,6 +307,7 @@ router.patch("/:id/archive", async (req: Request, res: Response) => {
   const tx = await sequelize.transaction(); // 순서 일관성을 위해 트랜잭션 시작
   try {
     const { id } = req.params;
+    const {is_complete} = req.body;
 
     const household = await CleanUpHousehold.findByPk(id);
 
@@ -321,11 +318,12 @@ router.patch("/:id/archive", async (req: Request, res: Response) => {
 
     const wasArchived = household.isArchived;
     const currentOrder = household.routeOrder;
+    console.log(is_complete);
 
     if (wasArchived) {
       // [CASE 1: 보관함 해제]
       // 1. 현재 항목 해제 (isArchived: false, routeOrder: 0)
-      await household.update({ isArchived: false, routeOrder: 0 }, { transaction: tx });
+      await household.update({ isArchived: false, routeOrder: 0,isComplete:is_complete??false }, { transaction: tx });
 
       // 2. 빠진 번호 뒤의 항목들 순서를 하나씩 당김 (routeOrder = routeOrder - 1)
       await CleanUpHousehold.update(
