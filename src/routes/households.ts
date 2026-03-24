@@ -75,6 +75,8 @@ router.get("/list", async (req: Request, res: Response) => {
       page = 1, 
       pageSize = 20, 
       q = "", 
+      sort = "localNo", 
+      order = "asc",
       isArchived,
       isComplete // 프론트에서 보낼 작업완료 여부
     } = req.query;
@@ -103,7 +105,7 @@ router.get("/list", async (req: Request, res: Response) => {
       // 보관함이나 완료 목록은 최신순 혹은 지정 순서(routeOrder)로 정렬
       order: isComplete === "true" 
         ? [['updatedAt', 'DESC']] 
-        : (isArchived === "true" ? [['routeOrder', 'ASC']] : [['localNo', 'ASC']]),
+        : (isArchived === "true" ? [['routeOrder', 'ASC']] : [[String(sort), String(order).toUpperCase()]]),
     });
 
     return res.json({
