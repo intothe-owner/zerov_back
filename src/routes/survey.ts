@@ -9,20 +9,29 @@ import { SurveyQuestionOption } from "../models/SurveyQuestionOption";
 import { CleanUpHousehold } from "../models/CleanUpHousehold";
 import { SurveyResponse } from "../models/SurveyResponse";
 import { SurveyResponseAnswer } from "../models/SurveyResponseAnswer";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"; // 추가
+
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
 const router = Router();
 
 type QuestionType = "multiple" | "subjective";
 
 type SaveSurveyQuestion =
   | {
-      type: "multiple";
-      question: string;
-      options: [string, string, string, string, string];
-    }
+    type: "multiple";
+    question: string;
+    options: [string, string, string, string, string];
+  }
   | {
-      type: "subjective";
-      question: string;
-    };
+    type: "subjective";
+    question: string;
+  };
 
 type SaveSurveyBody = {
   title: string;
@@ -97,8 +106,28 @@ function validateSaveSurveyBody(body: any): { ok: true } | { ok: false; message:
 //서명 저장
 const signatureUploadDir = path.resolve(process.cwd(), "uploads", "survey-signatures");
 fs.mkdirSync(signatureUploadDir, { recursive: true });
-function isBase64SignatureDataUrl(value: string) {
-  return /^data:image\/png;base64,/.test(value);
+function isBase64SignatureDataUrl(data: string): boolean {
+  return data.startsWith("data:image/");
+}
+async function uploadBase64SignatureToS3(dataUrl: string, householdId: number): Promise<string> {
+  const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+  const buffer = Buffer.from(base64Data, "base64");
+  const contentType = dataUrl.split(";")[0].split(":")[1] || "image/png";
+  
+  const fileName = `signature_${householdId}_${Date.now()}.png`;
+  const s3Key = `uploads/signatures/${fileName}`;
+
+  const uploadCommand = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET!,
+    Key: s3Key,
+    Body: buffer,
+    ContentType: contentType,
+  });
+
+  await s3.send(uploadCommand);
+  
+  // S3 전체 URL 반환
+  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 function saveBase64Signature(base64: string, householdId: number) {
   const match = base64.match(/^data:image\/png;base64,(.+)$/);
@@ -250,10 +279,10 @@ router.get("/active", async (_req: Request, res: Response) => {
           options:
             q.type === "multiple"
               ? ((q.options ?? []) as any[]).map((opt) => ({
-                  id: opt.id,
-                  optionNo: opt.optionNo,
-                  optionText: opt.optionText,
-                }))
+                id: opt.id,
+                optionNo: opt.optionNo,
+                optionText: opt.optionText,
+              }))
               : [],
         })),
       },
@@ -317,6 +346,25 @@ router.post("/submit", async (req: Request, res: Response) => {
     const signatureDataUrl = String(body.signatureDataUrl ?? "").trim();
     const answers = Array.isArray(body.answers) ? body.answers : [];
 
+    // 1. Base64 데이터에서 실제 파일 데이터만 추출
+const base64Data = signatureDataUrl.replace(/^data:image\/\w+;base64,/, "");
+const buffer = Buffer.from(base64Data, "base64");
+const contentType = signatureDataUrl.split(";")[0].split(":")[1];
+// 2. S3에 저장할 파일명 설정
+const fileName = `signature_${householdId}_${Date.now()}.png`;
+const s3Key = `uploads/signatures/${fileName}`;
+const uploadCommand = new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET!,
+    Key: s3Key,
+    Body: buffer,
+    ContentType: contentType,
+    // ACL은 버킷 설정에 따라 생략 (앞서 발생한 ACL 에러 방지)
+  });
+
+  await s3.send(uploadCommand);
+  
+  // S3 전체 URL 생성 (버킷 정책이 Public Read여야 합니다)
+  const finalSignatureUrl = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
     if (!Number.isInteger(householdId) || householdId <= 0) {
       await tx.rollback();
       return res.status(400).json({ message: "대상자 정보가 올바르지 않습니다." });
@@ -368,20 +416,21 @@ router.post("/submit", async (req: Request, res: Response) => {
       return res.status(404).json({ message: "대상자를 찾을 수 없습니다." });
     }
 
-    // 기존 서명 우선 확인
-let signaturePath = household.surveySignature ?? null;
+    // 1. 기존 서명 우선 확인 (DB에 저장된 S3 URL)
+    let signaturePath = household.surveySignature ?? null;
 
-// 새로 그린 base64 서명일 때만 파일 저장
-if (signatureDataUrl && isBase64SignatureDataUrl(signatureDataUrl)) {
-  signaturePath = saveBase64Signature(signatureDataUrl, householdId);
-}
+    // 2. 새로 그린 base64 서명일 때만 S3 업로드 실행
+    if (signatureDataUrl && isBase64SignatureDataUrl(signatureDataUrl)) {
+      signaturePath = await uploadBase64SignatureToS3(signatureDataUrl, householdId);
+    } 
+    // 만약 signatureDataUrl이 Base64가 아니고 일반 URL(http...)로 넘어왔다면
+    // 위 if문을 타지 않고 기존 signaturePath를 그대로 유지함
 
-// 프론트가 기존 서명 URL(http://..., /uploads/...)을 보내는 경우는
-// 새 저장 없이 기존 서명 재사용
-if (!signaturePath) {
-  await tx.rollback();
-  return res.status(400).json({ message: "서명을 입력해 주세요." });
-}
+    // 3. 서명 유무 최종 검증
+    if (!signaturePath) {
+      await tx.rollback();
+      return res.status(400).json({ message: "서명을 입력해 주세요." });
+    }
 
     household.surveySignature = signaturePath;
     household.surveySubmittedAt = new Date();

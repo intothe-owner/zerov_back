@@ -16,12 +16,13 @@ export class WorkReport extends Model<
   declare id: CreationOptional<number>;
   declare householdId: ForeignKey<CleanUpHousehold["id"]>;
 
+
   declare dongName: string | null;
   declare residentName: string | null;
 
   declare agencyName: CreationOptional<string>;
-declare companyName: CreationOptional<string>;
-declare companyPhone: CreationOptional<string>;
+  declare companyName: CreationOptional<string>;
+  declare companyPhone: CreationOptional<string>;
 
   declare jobName: string | null;
   declare workDate: string | null;
@@ -52,6 +53,7 @@ WorkReport.init(
       onDelete: "CASCADE",
       onUpdate: "CASCADE",
     },
+    
     dongName: {
       type: DataTypes.STRING(100),
       allowNull: true,

@@ -99,7 +99,7 @@ CleanUpHousehold.init(
       field: "category_code",
       comment: "구분 코드",
     },
-
+    
     dong: {
       type: DataTypes.STRING(30),
       allowNull: false,
@@ -125,7 +125,7 @@ CleanUpHousehold.init(
       comment: "주민등록번호",
     },
 
-    phone: {
+    phone: { 
       type: DataTypes.STRING(255),
       allowNull: true,
       comment: "핸드폰번호",

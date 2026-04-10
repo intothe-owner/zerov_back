@@ -399,6 +399,7 @@ function mapRowToEntity(
 
   const localNo = toNumber(getValue("localNo"));
   const categoryCodeRaw = toNumber(getValue("categoryCode"));
+ 
   const totalScore = toNumber(getValue("totalScore"));
   const rank = resolveRank(getValue("rank"), localNo, rowIndex);
 
@@ -477,9 +478,12 @@ router.post(
           message: "업로드할 엑셀 파일이 없습니다. field name은 file 이어야 합니다.",
         });
       }
+      console.log(req.body);
 
       const programYear = Number(req.body.programYear ?? 2025);
       const listType = req.body.listType;
+
+  
       const overwrite = String(req.body.overwrite ?? "true") === "true";
 
       if (!Number.isInteger(programYear) || programYear < 2000) {

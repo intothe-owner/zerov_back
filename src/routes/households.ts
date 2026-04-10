@@ -5,7 +5,15 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { sequelize } from "../db/sequelize";
-
+import multerS3 from "multer-s3";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+const s3 = new S3Client({
+  region: process.env.AWS_REGION, // 예: 'ap-northeast-2'
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
 const router = Router();
 
 const uploadDir = path.resolve(process.cwd(), "uploads", "households");
@@ -31,12 +39,22 @@ const fileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    files: 4,
-    fileSize: 10 * 1024 * 1024,
-  },
+  storage: multerS3({
+    s3: s3,
+    bucket: process.env.AWS_S3_BUCKET!, // 버킷 이름
+    contentType: multerS3.AUTO_CONTENT_TYPE, // 자동으로 mimetype 설정 (브라우저에서 열기 가능하게)
+    //acl: 'public-read', // 권한 설정 (필요에 따라 변경)
+    key: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const baseName = path.basename(file.originalname, ext);
+      const safeBaseName = baseName.replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+
+      // 
+      cb(null, `uploads/zerovapp/${Date.now()}_${Math.round(Math.random() * 1e9)}_${safeBaseName}${ext}`);
+    },
+  }),
+  fileFilter: fileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 const photoUpload = upload.fields([
@@ -46,23 +64,31 @@ const photoUpload = upload.fields([
   { name: "afterImage", maxCount: 1 },
 ]);
 
-function toPublicPath(file?: Express.Multer.File) {
+function toPublicPath(file?: any) {
   if (!file) return null;
-  return `/uploads/households/${file.filename}`;
+  // S3 업로드 시에는 file.location에 전체 URL이 담겨 있습니다.
+  return file.location || null;
 }
 
-function deleteOldFile(filePath?: string | null) {
-  if (!filePath) return;
+async function deleteOldFile(fileUrl?: string | null) {
+  if (!fileUrl || !fileUrl.startsWith("http")) return;
 
-  const normalized = filePath.replace(/^\/+/, "");
-  const absolute = path.resolve(process.cwd(), normalized);
+  try {
+    // URL에서 S3 Key(경로)만 추출합니다.
+    // 예: https://bucket.s3.region.amazonaws.com/uploads/zerovapp/file.jpg 
+    // -> Key: uploads/zerovapp/file.jpg
+    const url = new URL(fileUrl);
+    const bucketKey = url.pathname.replace(/^\/+/, "");
 
-  if (fs.existsSync(absolute)) {
-    try {
-      fs.unlinkSync(absolute);
-    } catch (err) {
-      console.error("기존 파일 삭제 실패:", absolute, err);
-    }
+    const command = new DeleteObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET!,
+      Key: bucketKey,
+    });
+
+    await s3.send(command);
+    console.log("S3 기존 파일 삭제 완료:", bucketKey);
+  } catch (err) {
+    console.error("S3 기존 파일 삭제 실패:", err);
   }
 }
 
@@ -71,11 +97,11 @@ function deleteOldFile(filePath?: string | null) {
  */
 router.get("/list", async (req: Request, res: Response) => {
   try {
-    const { 
-      page = 1, 
-      pageSize = 20, 
-      q = "", 
-      sort = "localNo", 
+    const {
+      page = 1,
+      pageSize = 20,
+      q = "",
+      sort = "localNo",
       order = "asc",
       isArchived,
       isComplete // 프론트에서 보낼 작업완료 여부
@@ -103,8 +129,8 @@ router.get("/list", async (req: Request, res: Response) => {
       limit: Number(pageSize),
       offset: (Number(page) - 1) * Number(pageSize),
       // 보관함이나 완료 목록은 최신순 혹은 지정 순서(routeOrder)로 정렬
-      order: isComplete === "true" 
-        ? [['updatedAt', 'DESC']] 
+      order: isComplete === "true"
+        ? [['updatedAt', 'DESC']]
         : (isArchived === "true" ? [['routeOrder', 'ASC']] : [[String(sort), String(order).toUpperCase()]]),
     });
 
@@ -158,8 +184,8 @@ router.put("/:id/photos", (req: Request, res: Response) => {
 
       const files = req.files as
         | {
-            [fieldname: string]: Express.Multer.File[];
-          }
+          [fieldname: string]: Express.Multer.File[];
+        }
         | undefined;
 
       const addressImageFile = files?.addressImage?.[0];
@@ -173,11 +199,13 @@ router.put("/:id/photos", (req: Request, res: Response) => {
         });
       }
 
-      if (addressImageFile && item.addressImage) deleteOldFile(item.addressImage);
-      if (beforeImageFile && item.beforeImage) deleteOldFile(item.beforeImage);
-      if (duringImageFile && item.duringImage) deleteOldFile(item.duringImage);
-      if (afterImageFile && item.afterImage) deleteOldFile(item.afterImage);
+      // 기존 파일 삭제 (비동기 처리)
+      if (addressImageFile && item.addressImage) await deleteOldFile(item.addressImage);
+      if (beforeImageFile && item.beforeImage) await deleteOldFile(item.beforeImage);
+      if (duringImageFile && item.duringImage) await deleteOldFile(item.duringImage);
+      if (afterImageFile && item.afterImage) await deleteOldFile(item.afterImage);
 
+      // DB 경로 업데이트 (toPublicPath가 이제 location을 반환함)
       if (addressImageFile) item.addressImage = toPublicPath(addressImageFile);
       if (beforeImageFile) item.beforeImage = toPublicPath(beforeImageFile);
       if (duringImageFile) item.duringImage = toPublicPath(duringImageFile);
@@ -309,7 +337,7 @@ router.patch("/:id/archive", async (req: Request, res: Response) => {
   const tx = await sequelize.transaction(); // 순서 일관성을 위해 트랜잭션 시작
   try {
     const { id } = req.params;
-    const {is_complete} = req.body;
+    const { is_complete } = req.body;
 
     const household = await CleanUpHousehold.findByPk(id);
 
@@ -325,7 +353,7 @@ router.patch("/:id/archive", async (req: Request, res: Response) => {
     if (wasArchived) {
       // [CASE 1: 보관함 해제]
       // 1. 현재 항목 해제 (isArchived: false, routeOrder: 0)
-      await household.update({ isArchived: false, routeOrder: 0,isComplete:is_complete??false }, { transaction: tx });
+      await household.update({ isArchived: false, routeOrder: 0, isComplete: is_complete ?? false }, { transaction: tx });
 
       // 2. 빠진 번호 뒤의 항목들 순서를 하나씩 당김 (routeOrder = routeOrder - 1)
       await CleanUpHousehold.update(
