@@ -427,4 +427,64 @@ router.patch("/reorder", async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, message: "순서 변경 중 오류 발생" });
   }
 });
+//개별적 등록
+router.post("/", async (req: Request, res: Response) => {
+  try {
+    const {
+      name,
+      rrn,
+      phone,
+      proxyPhone,
+      roadAddress,
+      detailAddress,
+      latitude,
+      longitude,
+      // 추가적으로 필요한 필드가 있다면 여기에 구조분해 할당
+    } = req.body;
+
+    // 1. 필수값 체크 (예시)
+    if (!name || !roadAddress) {
+      return res.status(400).json({ ok: false, message: "이름과 주소는 필수 항목입니다." });
+    }
+
+    // 2. 관리 번호(localNo) 자동 생성 로직 (필요시)
+    // 현재 연도의 가장 높은 localNo를 찾아 +1 하거나, 클라이언트에서 보낸 값을 사용
+    const maxLocalNo = await CleanUpHousehold.max("localNo", {
+      where: { programYear: new Date().getFullYear() }
+    });
+    const nextLocalNo = (Number(maxLocalNo) || 0) + 1;
+
+    // 3. 데이터 생성
+    const newHousehold = await CleanUpHousehold.create({
+      programYear: new Date().getFullYear(), // 기본값: 현재 연도
+      listType: "SELECTED", // 기본값: 선정
+      localNo: nextLocalNo,
+      categoryCode: 1, // 기본 카테고리 설정
+      dong: roadAddress.split(" ")[1] || "", // 주소에서 '동' 추출 시도
+      benefitType: "기타", // 기본 수급 유형
+      name,
+      rrn,
+      phone,
+      proxyPhone,
+      roadAddress,
+      detailAddress,
+      latitude,
+      longitude,
+      rank: 0,
+      totalScore: 0,
+      isArchived: false,
+      isComplete: false,
+      routeOrder: 0
+    });
+
+    return res.status(201).json({
+      ok: true,
+      message: "대상자가 성공적으로 등록되었습니다.",
+      data: newHousehold
+    });
+  } catch (error) {
+    console.error("등록 에러:", error);
+    return res.status(500).json({ ok: false, message: "서버 오류가 발생했습니다." });
+  }
+});
 export default router;
