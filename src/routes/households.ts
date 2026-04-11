@@ -487,4 +487,21 @@ router.post("/", async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, message: "서버 오류가 발생했습니다." });
   }
 });
+
+router.delete("/:id",async (req:Request, res:Response) => {
+  try{
+    const id = req.params.id;
+    await CleanUpHousehold.destroy({
+      where:{
+        id:id
+      }
+    });
+    return res.status(200).json({
+      ok: true,
+      message: "대상자가 성공적으로 삭제되었습니다.",
+    });
+  }catch(e){
+
+  }
+})
 export default router;
