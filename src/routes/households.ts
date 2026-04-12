@@ -121,7 +121,12 @@ router.get("/list", async (req: Request, res: Response) => {
     }
 
     if (q) {
-      where.name = { [Op.like]: `%${q}%` };
+      where[Op.or] = [
+        { name: { [Op.like]: `%${q}%` } },
+        { phone: { [Op.like]: `%${q}%` } },
+        { proxyPhone: { [Op.like]: `%${q}%` } },
+        { roadAddress: { [Op.like]: `%${q}%` } }
+      ];
     }
 
     const { rows, count } = await CleanUpHousehold.findAndCountAll({
@@ -474,7 +479,7 @@ router.post("/", async (req: Request, res: Response) => {
       totalScore: 0,
       isArchived: false,
       isComplete: false,
-      isCancel:false,
+      isCancel: false,
       routeOrder: 0
     });
 
@@ -489,15 +494,15 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-router.put("/:id",async (req:Request, res:Response) => {
-  try{
+router.put("/:id", async (req: Request, res: Response) => {
+  try {
     const id = req.params.id;
     await CleanUpHousehold.update({
-      isCancel:true,
-      isArchived:false,
-      routeOrder:0
-    },{
-      where:{
+      isCancel: true,
+      isArchived: false,
+      routeOrder: 0
+    }, {
+      where: {
         id
       }
     });
@@ -505,7 +510,7 @@ router.put("/:id",async (req:Request, res:Response) => {
       ok: true,
       message: "대상자가 성공적으로 삭제되었습니다.",
     });
-  }catch(e){
+  } catch (e) {
 
   }
 })

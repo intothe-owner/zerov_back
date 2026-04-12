@@ -24,6 +24,7 @@ export class SurveyResponse extends Model<
   declare surveyDay: number;
 
   declare signaturePath: string | null;
+  declare reportMemo: string | null;
   declare submittedAt: CreationOptional<Date>;
 
   declare createdAt: CreationOptional<Date>;
@@ -98,6 +99,12 @@ SurveyResponse.init(
       defaultValue: DataTypes.NOW,
       field: "submitted_at",
       comment: "제출일시",
+    },
+    reportMemo: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "report_memo",
+      comment: '메모'
     },
     createdAt: {
       type: DataTypes.DATE,

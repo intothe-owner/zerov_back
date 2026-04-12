@@ -45,6 +45,7 @@ type SubmitSurveyBody = {
   surveyDay: string;
   surveyName: string;
   signatureDataUrl: string;
+  reportMemo: string;
   answers: Array<{
     questionId: number;
     type: "multiple" | "subjective";
@@ -113,7 +114,7 @@ async function uploadBase64SignatureToS3(dataUrl: string, householdId: number): 
   const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
   const buffer = Buffer.from(base64Data, "base64");
   const contentType = dataUrl.split(";")[0].split(":")[1] || "image/png";
-  
+
   const fileName = `signature_${householdId}_${Date.now()}.png`;
   const s3Key = `uploads/signatures/${fileName}`;
 
@@ -125,7 +126,7 @@ async function uploadBase64SignatureToS3(dataUrl: string, householdId: number): 
   });
 
   await s3.send(uploadCommand);
-  
+
   // S3 전체 URL 반환
   return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
 }
@@ -347,24 +348,25 @@ router.post("/submit", async (req: Request, res: Response) => {
     const answers = Array.isArray(body.answers) ? body.answers : [];
 
     // 1. Base64 데이터에서 실제 파일 데이터만 추출
-const base64Data = signatureDataUrl.replace(/^data:image\/\w+;base64,/, "");
-const buffer = Buffer.from(base64Data, "base64");
-const contentType = signatureDataUrl.split(";")[0].split(":")[1];
-// 2. S3에 저장할 파일명 설정
-const fileName = `signature_${householdId}_${Date.now()}.png`;
-const s3Key = `uploads/signatures/${fileName}`;
-const uploadCommand = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET!,
-    Key: s3Key,
-    Body: buffer,
-    ContentType: contentType,
-    // ACL은 버킷 설정에 따라 생략 (앞서 발생한 ACL 에러 방지)
-  });
+    const base64Data = signatureDataUrl.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+    const contentType = signatureDataUrl.split(";")[0].split(":")[1];
+    // 2. S3에 저장할 파일명 설정
+    const fileName = `signature_${householdId}_${Date.now()}.png`;
+    const s3Key = `uploads/signatures/${fileName}`;
+    const reportMemo = String(body.reportMemo ?? "").trim();
+    const uploadCommand = new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET!,
+      Key: s3Key,
+      Body: buffer,
+      ContentType: contentType,
+      // ACL은 버킷 설정에 따라 생략 (앞서 발생한 ACL 에러 방지)
+    });
 
-  await s3.send(uploadCommand);
-  
-  // S3 전체 URL 생성 (버킷 정책이 Public Read여야 합니다)
-  const finalSignatureUrl = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+    await s3.send(uploadCommand);
+
+    // S3 전체 URL 생성 (버킷 정책이 Public Read여야 합니다)
+    const finalSignatureUrl = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
     if (!Number.isInteger(householdId) || householdId <= 0) {
       await tx.rollback();
       return res.status(400).json({ message: "대상자 정보가 올바르지 않습니다." });
@@ -422,7 +424,7 @@ const uploadCommand = new PutObjectCommand({
     // 2. 새로 그린 base64 서명일 때만 S3 업로드 실행
     if (signatureDataUrl && isBase64SignatureDataUrl(signatureDataUrl)) {
       signaturePath = await uploadBase64SignatureToS3(signatureDataUrl, householdId);
-    } 
+    }
     // 만약 signatureDataUrl이 Base64가 아니고 일반 URL(http...)로 넘어왔다면
     // 위 if문을 타지 않고 기존 signaturePath를 그대로 유지함
 
@@ -437,20 +439,43 @@ const uploadCommand = new PutObjectCommand({
     household.surveySubmittedByName = surveyName;
     await household.save({ transaction: tx });
 
-    const response = await SurveyResponse.create(
-      {
+    // 1. 먼저 기존 데이터가 있는지 확인 (surveyId와 householdId 조합으로 체크)
+    const existingResponse = await SurveyResponse.findOne({
+      where: {
         surveyId: survey.id,
-        householdId: household.id,
-        respondentName: surveyName,
-        surveyYear: new Date().getFullYear(),
-        surveyMonth,
-        surveyDay,
-        signaturePath,
-        submittedAt: new Date(),
+        householdId: household.id
       },
-      { transaction: tx }
-    );
+      transaction: tx
+    });
 
+    const responseData = {
+      surveyId: survey.id,
+      householdId: household.id,
+      respondentName: surveyName,
+      surveyYear: new Date().getFullYear(),
+      surveyMonth,
+      surveyDay,
+      signaturePath,
+      reportMemo,
+      submittedAt: new Date(),
+    };
+    let response = null;
+    if (existingResponse) {
+      // 2. [UPDATE] 기존 응답이 있으면 정보를 업데이트하고, 기존 답변들만 삭제
+      response = await existingResponse.update(responseData, { transaction: tx });
+
+      // 중요: 기존에 연결된 답변(Answers)들을 먼저 삭제해서 중복 방지
+      await SurveyResponseAnswer.destroy({
+        where: { responseId: response.id },
+        transaction: tx
+      });
+    } else {
+      // 3. [INSERT] 데이터가 없으면 새로 생성
+      response = await SurveyResponse.create(responseData, { transaction: tx });
+    }
+
+
+    // 4. 새로운 답변들 생성 (Insert)
     const questionMap = new Map<number, any>();
     const surveyQuestions = (survey as any).questions ?? [];
     for (const q of surveyQuestions) {
@@ -459,31 +484,17 @@ const uploadCommand = new PutObjectCommand({
 
     const answerRows = answers.map((answer) => {
       const q = questionMap.get(answer.questionId);
-      if (!q) {
-        throw new Error(`유효하지 않은 문항입니다. questionId=${answer.questionId}`);
-      }
-
-      if (q.type === "multiple") {
-        if (!answer.selectedOptionNo) {
-          throw new Error(`객관식 응답이 누락되었습니다. questionId=${answer.questionId}`);
-        }
-
-        return {
-          responseId: response.id,
-          questionId: answer.questionId,
-          selectedOptionNo: answer.selectedOptionNo,
-          subjectiveAnswer: null,
-        };
-      }
+      if (!q) throw new Error(`유효하지 않은 문항입니다. ID=${answer.questionId}`);
 
       return {
-        responseId: response.id,
+        responseId: response.id, // 위에서 update/create된 response의 id 사용
         questionId: answer.questionId,
-        selectedOptionNo: null,
-        subjectiveAnswer: String(answer.subjectiveAnswer ?? "").trim() || null,
+        selectedOptionNo: q.type === "multiple" ? answer.selectedOptionNo : null,
+        subjectiveAnswer: q.type === "subjective" ? String(answer.subjectiveAnswer ?? "").trim() : null,
       };
     });
 
+    // bulkCreate로 한꺼번에 저장
     await SurveyResponseAnswer.bulkCreate(answerRows, { transaction: tx });
 
     await tx.commit();
