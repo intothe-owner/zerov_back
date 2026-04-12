@@ -474,6 +474,7 @@ router.post("/", async (req: Request, res: Response) => {
       totalScore: 0,
       isArchived: false,
       isComplete: false,
+      isCancel:false,
       routeOrder: 0
     });
 
@@ -488,12 +489,16 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-router.delete("/:id",async (req:Request, res:Response) => {
+router.put("/:id",async (req:Request, res:Response) => {
   try{
     const id = req.params.id;
-    await CleanUpHousehold.destroy({
+    await CleanUpHousehold.update({
+      isCancel:true,
+      isArchived:false,
+      routeOrder:0
+    },{
       where:{
-        id:id
+        id
       }
     });
     return res.status(200).json({

@@ -60,6 +60,7 @@ export class CleanUpHousehold extends Model<
   declare isArchived: CreationOptional<boolean> | false; // 추가
   declare routeOrder: number | 0; // 추가
   declare isComplete: boolean | false;//완료
+  declare isCancel: boolean | false;//취소
 }
 
 CleanUpHousehold.init(
@@ -299,6 +300,13 @@ CleanUpHousehold.init(
       defaultValue: false,
       field: "is_complete",
       comment: "작업완료여부",
+    },
+    isCancel: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      field: "is_cancel",
+      comment: "취소여부",
     },
   },
   {
