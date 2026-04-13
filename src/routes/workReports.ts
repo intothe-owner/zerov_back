@@ -11,6 +11,7 @@ import { Survey } from "../models/Survey";
 import { SurveyQuestion } from "../models/SurveyQuestion";
 import { SurveyQuestionOption } from "../models/SurveyQuestionOption";
 import { createWorkReportPdfBuffer } from "../services/createWorkReportPdf";
+import moment from "moment";
 import {
   makeWorkReportTitle,
   makeSafePdfFileName,
@@ -265,16 +266,17 @@ router.post(
       const surveyInfo = (surveyResponse as any)?.survey;
       const responseInfo = surveyResponse as any;
 
+
       const pdfBuffer = await createWorkReportPdfBuffer({
         title,
         agencyName: dongName,
         companyName: report.companyName,
         companyPhone: report.companyPhone,
         jobName: '해운대구 취약계층 에어클린 UP',//report.jobName ?? "-",
-        workDate: formatDate(report.workDate),
+        workDate: report.workDate ? moment(report.workDate, ["YYYY-MM-DD", "YYYY.MM.DD"]).format('YYYY.MM.DD') : "-",
         workerName: report.workerName ?? "-",
         address: report.address ?? "-",
-        memo: report.memo ?? "",
+        memo:  responseInfo?.reportMemo??"",
         surveyTitle: surveyInfo?.title ?? "설문조사",
         surveyIntro: surveyInfo?.intro ?? "",
         surveyMeta: {

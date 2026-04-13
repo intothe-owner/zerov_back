@@ -8,6 +8,7 @@ import {
 } from "sequelize";
 import { sequelize } from "../db/sequelize";
 import { CleanUpHousehold } from "./CleanUpHousehold";
+import moment from "moment";
 
 export class WorkReport extends Model<
   InferAttributes<WorkReport>,
@@ -25,7 +26,7 @@ export class WorkReport extends Model<
   declare companyPhone: CreationOptional<string>;
 
   declare jobName: string | null;
-  declare workDate: string | null;
+  declare workDate: Date | string | null;
   declare workerName: string | null;
   declare address: string | null;
   declare memo: string | null;
@@ -82,9 +83,19 @@ WorkReport.init(
       allowNull: true,
     },
     workDate: {
-      type: DataTypes.DATEONLY,
-      allowNull: true,
-    },
+  type: DataTypes.DATE,
+  allowNull: true,
+  comment: "작업 일자",
+  set(value: any) {
+    if (typeof value === 'string' && value.includes('.')) {
+      // "2026.04.13" 형식을 "2026-04-13"으로 바꾸거나 moment로 정확히 파싱
+      const sanitizedDate = moment(value, "YYYY.MM.DD").toDate();
+      this.setDataValue('workDate', sanitizedDate);
+    } else {
+      this.setDataValue('workDate', value);
+    }
+  }
+},
     workerName: {
       type: DataTypes.STRING(100),
       allowNull: true,
