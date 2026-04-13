@@ -349,11 +349,11 @@ async function drawSurveyMetaAndSignature(
   // 3페이지로 넘어가는 것을 방지하기 위해 임계값을 더 넉넉하게 잡습니다.
   if (y + 110 > 820) {
     doc.addPage();
-    y = 40;
+    y = 80;
   }else {
     // 2. 이 부분에 간격 추가 (예: 40만큼 벌리기)
     // 서술식 블록이 끝난 지점부터 서명 섹션 시작점 사이의 여백이 됩니다.
-    y += 40; 
+    y += 80; 
   }
 
   // 회색 안내 바
@@ -495,36 +495,53 @@ export async function createWorkReportPdfBuffer(
               surveyY
             );
           } else {
-            surveyY = drawSubjectiveBlock(
-              doc,
-              index + 1,
-              item.question,
-              item.answer,
-              surveyY
-            );
+            if (params.memo) {
+              // 기준점을 770에서 800으로 높이고, 여유 공간 체크를 120에서 80으로 완화
+              if (surveyY + 80 > 800) {
+                doc.addPage();
+                surveyY = 40;
+              }
+              
+              doc.font("NotoSansKR-Bold").fontSize(11).text("메모", 60, surveyY);
+              surveyY += 15;
+
+              const memoBoxHeight = 60; // 기존 80에서 60으로 축소
+              doc.rect(60, surveyY, 475, memoBoxHeight).stroke();
+              doc.font("NotoSansKR").fontSize(9).text(params.memo, 72, surveyY + 8, {
+                width: 450,
+                lineGap: 1,
+              });
+            }
+            // surveyY = drawSubjectiveBlock(
+            //   doc,
+            //   index + 1,
+            //   item.question,
+            //   item.answer,
+            //   surveyY
+            // );
           }
         });
       }
 
       surveyY = await drawSurveyMetaAndSignature(doc, params, surveyY);
 
-      if (params.memo) {
-        // 기준점을 770에서 800으로 높이고, 여유 공간 체크를 120에서 80으로 완화
-        if (surveyY + 80 > 800) {
-          doc.addPage();
-          surveyY = 40;
-        }
+      // if (params.memo) {
+      //   // 기준점을 770에서 800으로 높이고, 여유 공간 체크를 120에서 80으로 완화
+      //   if (surveyY + 80 > 800) {
+      //     doc.addPage();
+      //     surveyY = 40;
+      //   }
 
-        doc.font("NotoSansKR-Bold").fontSize(11).text("메모", 60, surveyY);
-        surveyY += 15;
+      //   doc.font("NotoSansKR-Bold").fontSize(11).text("메모", 60, surveyY);
+      //   surveyY += 15;
 
-        const memoBoxHeight = 60; // 기존 80에서 60으로 축소
-        doc.rect(60, surveyY, 475, memoBoxHeight).stroke();
-        doc.font("NotoSansKR").fontSize(9).text(params.memo, 72, surveyY + 8, {
-          width: 450,
-          lineGap: 1,
-        });
-      }
+      //   const memoBoxHeight = 60; // 기존 80에서 60으로 축소
+      //   doc.rect(60, surveyY, 475, memoBoxHeight).stroke();
+      //   doc.font("NotoSansKR").fontSize(9).text(params.memo, 72, surveyY + 8, {
+      //     width: 450,
+      //     lineGap: 1,
+      //   });
+      // }
 
       doc.end();
     } catch (error) {
