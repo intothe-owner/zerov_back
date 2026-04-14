@@ -17,6 +17,7 @@ type SurveyAnswer = {
 
 type CreatePdfParams = {
   title: string;
+  name:string;
   agencyName: string;
   companyName: string;
   companyPhone: string;
@@ -418,6 +419,30 @@ async function drawSurveyMetaAndSignature(
 
   return y + 60;
 }
+function drawFullInfoRow(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  label: string,
+  value: string
+) {
+  const rowH = 34;
+
+  // 외곽선 그리기
+  doc.rect(40, y, 515, rowH).stroke();
+  // 라벨과 데이터 사이의 세로선만 그리기 (110 위치)
+  doc.moveTo(110, y).lineTo(110, y + rowH).stroke();
+
+  // 라벨 (왼쪽 1칸)
+  doc.font("NotoSansKR-Bold").fontSize(11);
+  doc.text(label, 40, y + 10, { width: 70, align: "center" });
+
+  // 데이터 (오른쪽 3칸 병합 영역)
+  doc.font("NotoSansKR").text(textOrDash(value), 120, y + 10, {
+    width: 425, // 515 - 70 - 간격(약 20)
+  });
+
+  return y + rowH;
+}
 export async function createWorkReportPdfBuffer(
   params: CreatePdfParams
 ): Promise<Buffer> {
@@ -442,10 +467,10 @@ export async function createWorkReportPdfBuffer(
 
       let y = 85;
 
-      y = drawInfoRow(doc, y, "작업장소", params.agencyName, "회사명", params.companyName);
-      y = drawInfoRow(doc, y, "공사명", params.jobName, "주소", params.address);
-      y = drawInfoRow(doc, y, "작업일자", params.workDate, "전화번호", params.companyPhone);
-      y = drawInfoRow(doc, y, "청소사진", params.workerName, "대표", params.workerName);
+      y = drawInfoRow(doc, y, "작업장소", params.address, "회사명", params.companyName);
+      y = drawFullInfoRow(doc, y, "이름", params.name);
+      y = drawInfoRow(doc, y, "공사명", params.jobName, "전화번호", params.companyPhone);
+      y = drawInfoRow(doc, y, "작업일자", params.workDate, "서비스담당", params.workerName);
 
 
       y += 18;

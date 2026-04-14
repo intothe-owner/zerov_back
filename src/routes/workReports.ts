@@ -62,31 +62,31 @@ function getAnswerText(question: any, answer: any) {
  * 최신 작업보고서 조회
  * GET /work-reports/household/:householdId/latest
  */
-// router.get("/household/:householdId/latest", async (req: Request, res: Response) => {
-//   try {
-//     const householdId = Number(req.params.householdId);
+router.get("/household/:householdId/latest", async (req: Request, res: Response) => {
+  try {
+    const householdId = Number(req.params.householdId);
 
-//     if (!Number.isInteger(householdId) || householdId <= 0) {
-//       return res.status(400).json({ message: "유효하지 않은 householdId 입니다." });
-//     }
+    if (!Number.isInteger(householdId) || householdId <= 0) {
+      return res.status(400).json({ message: "유효하지 않은 householdId 입니다." });
+    }
 
-//     const item = await WorkReport.findOne({
-//       where: { householdId },
-//       order: [["createdAt", "DESC"]],
-//     });
+    const item = await WorkReport.findOne({
+      where: { householdId },
+      order: [["createdAt", "DESC"]],
+    });
 
-//     if (!item) {
-//       return res.status(404).json({ message: "저장된 작업보고서가 없습니다." });
-//     }
+    if (!item) {
+      return res.status(404).json({ message: "저장된 작업보고서가 없습니다." });
+    }
 
-//     return res.json({ item });
-//   } catch (error: any) {
-//     console.error(error);
-//     return res.status(500).json({
-//       message: error?.message || "작업보고서 조회에 실패했습니다.",
-//     });
-//   }
-// });
+    return res.json({ item });
+  } catch (error: any) {
+    console.error(error);
+    return res.status(500).json({
+      message: error?.message || "작업보고서 조회에 실패했습니다.",
+    });
+  }
+});
 
 // /**
 //  * 저장된 PDF 다운로드
@@ -266,9 +266,10 @@ router.post(
       const surveyInfo = (surveyResponse as any)?.survey;
       const responseInfo = surveyResponse as any;
 
-
+      console.log(surveyInfo);
       const pdfBuffer = await createWorkReportPdfBuffer({
         title,
+        name:householdAny.name,
         agencyName: dongName,
         companyName: report.companyName,
         companyPhone: report.companyPhone,
