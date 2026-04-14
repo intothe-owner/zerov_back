@@ -315,7 +315,7 @@ function drawSubjectiveBlock(
   const pageBottom = 790;
   doc.font("NotoSansKR-Bold").fontSize(11);
 
-  const questionText = `${index}. ${textOrDash(question)}`;
+  const questionText = `${textOrDash(question)} (기타)`;
   const titleHeight = doc.heightOfString(questionText, { width: 470, lineGap: 4});
   const answerTextHeight = doc.heightOfString(textOrDash(answer), { width: 450, lineGap: 4 });
 
