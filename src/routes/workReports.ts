@@ -182,14 +182,22 @@ router.post(
         "";
 
       const address = getHouseholdAddress(householdAny) || "-";
-
+      // 1. workDate 유효성 검사 및 안전한 할당
+let safeWorkDate = body.workDate;
+// 만약 body.workDate가 'Invalid date'이거나 유효하지 않다면 오늘 날짜로 대체
+if (!safeWorkDate || safeWorkDate === "Invalid date" || !moment(safeWorkDate).isValid()) {
+  safeWorkDate = moment().format("YYYY-MM-DD"); 
+} else {
+  // 형식을 DB 규격(YYYY-MM-DD)에 맞게 통일
+  safeWorkDate = moment(safeWorkDate).format("YYYY-MM-DD");
+}
       const report = await WorkReport.create(
         {
           householdId,
           dongName,
           residentName,
           jobName: body.jobName,
-          workDate: body.workDate,
+          workDate: safeWorkDate,
           workerName: body.workerName,
           address,
           memo: body.memo ?? null,
