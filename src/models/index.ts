@@ -5,6 +5,8 @@ import { SurveyQuestionOption } from "./SurveyQuestionOption";
 import { SurveyResponse } from "./SurveyResponse";
 import { SurveyResponseAnswer } from "./SurveyResponseAnswer";
 import { WorkReport } from "./WorkReport";
+import { SeniorCenterCleanUp } from "./SeniorCenterCleanUp";
+import { SeniorCenterReport } from "./SeniorCenterReport";
 
 Survey.hasMany(SurveyQuestion, {
   foreignKey: "surveyId",
@@ -94,5 +96,7 @@ export {
   SurveyQuestionOption,
   SurveyResponse,
   SurveyResponseAnswer,
-  WorkReport
+  WorkReport,
+  SeniorCenterCleanUp,
+  SeniorCenterReport
 };

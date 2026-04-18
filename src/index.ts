@@ -7,8 +7,11 @@ import households from "./routes/households";
 import path from "path";
 import cookieParser from "cookie-parser";
 import importRouter from "./routes/import";
+import seniorCenterImport from "./routes/seniorCenterImport";
 import surveyRouter from "./routes/survey";
 import WorkReportRouter from "./routes/workReports";
+import seniorCenters from "./routes/seniorCenters";
+import seniorReports from "./routes/seniorReports";
 
 const app = express();
 
@@ -49,8 +52,11 @@ app.use(cookieParser());
 
 app.use("/households", households);
 app.use("/import", importRouter);
+app.use("/senior-import", seniorCenterImport);
 app.use("/survey", surveyRouter);
 app.use("/work-reports", WorkReportRouter);
+app.use("/senior", seniorCenters);
+app.use("/api/senior-centers", seniorReports);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("전역 에러:", err);

@@ -23,7 +23,7 @@ const upload = multer({
       lower.endsWith(".xlsx") ||
       file.mimetype === "application/vnd.ms-excel" ||
       file.mimetype ===
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
       file.mimetype === "application/octet-stream";
 
     if (!isExcel) {
@@ -68,10 +68,10 @@ type ParsedRow = {
   otherReason: string | null;
   remark: string | null;
   airconType: string | null; // 현재 모델에는 없음. 필요 시 모델 추가
-  isArchived:boolean | false;
-  isCancel:boolean | false;
+  isArchived: boolean | false;
+  isCancel: boolean | false;
   routeOrder: number | 0;
-  isComplete:boolean | false;
+  isComplete: boolean | false;
 };
 
 /**
@@ -134,7 +134,7 @@ function toSafeText(value: unknown): string {
  * 실제 업로드 파일 기준 헤더 alias
  */
 const HEADER_ALIASES: Record<
-  keyof Omit<ParsedRow, "programYear" | "listType" | "latitude" | "longitude"| "isArchived" | "routeOrder"|"isComplete"|"isCancel" >,
+  keyof Omit<ParsedRow, "programYear" | "listType" | "latitude" | "longitude" | "isArchived" | "routeOrder" | "isComplete" | "isCancel">,
   string[]
 > = {
   localNo: [
@@ -253,7 +253,7 @@ const HEADER_ALIASES: Record<
     "거주기간점수",
   ],
 
-  scoreBenefitType: [ 
+  scoreBenefitType: [
     "수급형태(20점)",
     "수급형태(10점)",
     "수급형태점수",
@@ -400,7 +400,7 @@ function mapRowToEntity(
 
   const localNo = toNumber(getValue("localNo"));
   const categoryCodeRaw = toNumber(getValue("categoryCode"));
- 
+
   const totalScore = toNumber(getValue("totalScore"));
   const rank = resolveRank(getValue("rank"), localNo, rowIndex);
 
@@ -423,7 +423,7 @@ function mapRowToEntity(
     rank,
     totalScore: totalScore ?? 0,
     scoreHouseholdSize: toNumber(getValue("scoreHouseholdSize")),
-    scoreAge: toNumber(getValue("scoreAge")), 
+    scoreAge: toNumber(getValue("scoreAge")),
     scoreDisability: toNumber(getValue("scoreDisability")),
     scoreResidencePeriod: toNumber(getValue("scoreResidencePeriod")),
     scoreBenefitType: toNumber(getValue("scoreBenefitType")),
@@ -432,9 +432,9 @@ function mapRowToEntity(
     remark: nullableString(getValue("remark")),
     airconType: nullableString(getValue("airconType")),
     isArchived: false,
-    isComplete:false,
-    isCancel:false,
-    routeOrder:0
+    isComplete: false,
+    isCancel: false,
+    routeOrder: 0
   };
 
   const missingFields: string[] = [];
@@ -485,7 +485,7 @@ router.post(
       const programYear = Number(req.body.programYear ?? 2025);
       const listType = req.body.listType;
 
-  
+
       const overwrite = String(req.body.overwrite ?? "true") === "true";
 
       if (!Number.isInteger(programYear) || programYear < 2000) {
@@ -509,21 +509,21 @@ router.post(
       const errors: string[] = [];
 
       // 순차적으로 좌표를 가져오기 위해 for...of 문 사용 (API 과부하 방지)
-for (const [index, row] of rawRows.entries()) {
-  const rowNumber = index + 2;
-  try {
-    const entity = mapRowToEntity(row, headers, programYear, listType, rowNumber);
-    
-    // 주소를 좌표로 변환 (추가된 부분)
-    const coords = await getCoordsByAddress(entity.roadAddress);
-    entity.latitude = coords.latitude;
-    entity.longitude = coords.longitude;
+      for (const [index, row] of rawRows.entries()) {
+        const rowNumber = index + 2;
+        try {
+          const entity = mapRowToEntity(row, headers, programYear, listType, rowNumber);
 
-    parsedRows.push(entity);
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : `${rowNumber}행 처리 실패`);
-  }
-}
+          // 주소를 좌표로 변환 (추가된 부분)
+          const coords = await getCoordsByAddress(entity.roadAddress);
+          entity.latitude = coords.latitude;
+          entity.longitude = coords.longitude;
+
+          parsedRows.push(entity);
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `${rowNumber}행 처리 실패`);
+        }
+      }
 
       if (!parsedRows.length) {
         return res.status(400).json({
@@ -570,10 +570,10 @@ for (const [index, row] of rawRows.entries()) {
             remark: row.remark,
             latitude: row.latitude,
             longitude: row.longitude,
-            isArchived:row.isArchived,
-            routeOrder:row.routeOrder,
-            isComplete:row.isComplete,
-            isCancel:row.isCancel
+            isArchived: row.isArchived,
+            routeOrder: row.routeOrder,
+            isComplete: row.isComplete,
+            isCancel: row.isCancel
             // airconType: row.airconType, // 모델 추가 후 활성화
           })),
           {
@@ -583,7 +583,7 @@ for (const [index, row] of rawRows.entries()) {
         );
       } else {
         await CleanUpHousehold.bulkCreate(
-          parsedRows.map((row) => ({ 
+          parsedRows.map((row) => ({
             programYear: row.programYear,
             listType: row.listType,
             localNo: row.localNo,
@@ -606,10 +606,10 @@ for (const [index, row] of rawRows.entries()) {
             scoreOther: row.scoreOther,
             otherReason: row.otherReason,
             remark: row.remark,
-            isArchived:row.isArchived,
-            routeOrder:row.routeOrder,
-            isComplete:row.isComplete,
-            isCancel:row.isCancel
+            isArchived: row.isArchived,
+            routeOrder: row.routeOrder,
+            isComplete: row.isComplete,
+            isCancel: row.isCancel
             // airconType: row.airconType, // 모델 추가 후 활성화
           })),
           {
