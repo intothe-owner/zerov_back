@@ -96,11 +96,10 @@ export async function createSeniorCenterReportPdfBuffer(params: SeniorCenterPdfP
     doc.text("대표", col3 + 10, row4Y + 7);
     doc.text(params.ceoName, col4 + 10, row4Y + 7);
 
-    // ✅ 세로 구분선 수정 (col4를 하단 끝까지 연결)
+    // 세로 구분선
     doc.lineWidth(0.8);
     doc.moveTo(col2, tableTop).lineTo(col2, tableBottom).stroke();
     doc.moveTo(col3, tableTop).lineTo(col3, tableBottom).stroke();
-    // 기존 lineTo(col4, row4Y)를 tableBottom으로 변경하여 '대표' 우측 테두리 생성
     doc.moveTo(col4, tableTop).lineTo(col4, tableBottom).stroke();
 
     // --- 3. 사진 영역 (중앙 정렬 및 꽉 차게) ---
@@ -112,36 +111,43 @@ export async function createSeniorCenterReportPdfBuffer(params: SeniorCenterPdfP
     const leftColX = 40;
     const rightColX = 305;
 
+    // ✅ 반반 나눌 때 사용할 너비 미리 계산
+    const halfWidth = (photoBoxWidth - 6) / 2;
+
     const drawPhotoTitle = (title: string, x: number, y: number, width: number) => {
       doc.font(fontBold).fontSize(11).text(title, x, y, { width: width, align: "center" });
     };
 
+    // ✅ 모든 photos 접근에 옵셔널 체이닝(?.) 적용 완료
     // 1행 사진
     drawPhotoTitle("경로당 입구", leftColX, photoAreaTop - 15, photoBoxWidth);
     doc.rect(leftColX, photoAreaTop, photoBoxWidth, photoBoxHeight).stroke();
-    const entImg = await getImageBuffer(params.photos.entranceImage);
+    const entImg = await getImageBuffer(params.photos?.entranceImage); 
     if(entImg) doc.image(entImg, leftColX + 2, photoAreaTop + 2, { width: photoBoxWidth - 4, height: photoBoxHeight - 4 });
 
-    drawPhotoTitle("작업 사진 1", rightColX, photoAreaTop - 15, photoBoxWidth);
+    // ✅ 작업 진행 사진 (workImage1, workImage2 분할 출력)
+    drawPhotoTitle("작업 진행 사진", rightColX, photoAreaTop - 15, photoBoxWidth);
     doc.rect(rightColX, photoAreaTop, photoBoxWidth, photoBoxHeight).stroke();
-    const workImg1 = await getImageBuffer(params.photos.workImage1);
-    if(workImg1) doc.image(workImg1, rightColX + 2, photoAreaTop + 2, { width: photoBoxWidth - 4, height: photoBoxHeight - 4 });
+    const workImg1 = await getImageBuffer(params.photos?.workImage1);
+    const workImg2 = await getImageBuffer(params.photos?.workImage2); // workImage2 추가 호출
+    if(workImg1) doc.image(workImg1, rightColX + 2, photoAreaTop + 2, { width: halfWidth, height: photoBoxHeight - 4 });
+    if(workImg2) doc.image(workImg2, rightColX + halfWidth + 4, photoAreaTop + 2, { width: halfWidth, height: photoBoxHeight - 4 });
 
     // 2행 사진
     const secondRowTop = photoAreaTop + photoBoxHeight + 35;
 
     drawPhotoTitle("작업 전/후 1", leftColX, secondRowTop - 15, photoBoxWidth);
     doc.rect(leftColX, secondRowTop, photoBoxWidth, photoBoxHeight).stroke();
-    const b1 = await getImageBuffer(params.photos.beforeImage1);
-    const a1 = await getImageBuffer(params.photos.afterImage1);
-    const halfWidth = (photoBoxWidth - 6) / 2;
+    const b1 = await getImageBuffer(params.photos?.beforeImage1);
+    const a1 = await getImageBuffer(params.photos?.afterImage1);
+
     if(b1) doc.image(b1, leftColX + 2, secondRowTop + 2, { width: halfWidth, height: photoBoxHeight - 4 });
     if(a1) doc.image(a1, leftColX + halfWidth + 4, secondRowTop + 2, { width: halfWidth, height: photoBoxHeight - 4 });
 
     drawPhotoTitle("작업 전/후 2", rightColX, secondRowTop - 15, photoBoxWidth);
     doc.rect(rightColX, secondRowTop, photoBoxWidth, photoBoxHeight).stroke();
-    const b2 = await getImageBuffer(params.photos.beforeImage2);
-    const a2 = await getImageBuffer(params.photos.afterImage2);
+    const b2 = await getImageBuffer(params.photos?.beforeImage2);
+    const a2 = await getImageBuffer(params.photos?.afterImage2);
     if(b2) doc.image(b2, rightColX + 2, secondRowTop + 2, { width: halfWidth, height: photoBoxHeight - 4 });
     if(a2) doc.image(a2, rightColX + halfWidth + 4, secondRowTop + 2, { width: halfWidth, height: photoBoxHeight - 4 });
 
