@@ -33,7 +33,7 @@ export class SeniorCenterCleanUp extends Model<
   
   // 공기청정기 설치현황 
   declare airPurifierCount: number | 0; // 공기청정기 
-
+  declare workName: string | null;
   declare workDate: Date | null; // 작업일자 
   declare remark: string | null; // 비고 
 
@@ -127,6 +127,12 @@ SeniorCenterCleanUp.init(
       defaultValue: 0,
       field: "air_purifier_count",
       comment: "공기청정기",
+    },
+    workName: {
+      type: DataTypes.STRING(50),
+      field: "work_name",
+      allowNull: true,
+      comment: "시설 유형",
     },
     workDate: {
       type: DataTypes.DATEONLY,

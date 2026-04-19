@@ -106,15 +106,35 @@ router.get("/:id/reports/:category/pdf", async (req: Request, res: Response) => 
     const report = await SeniorCenterReport.findOne({
       where: { centerId: id, category: category }
     });
-    console.log(req.query);
+    
+    
+    // 이전에 발생했던 타입 에러 방지용 (as string 처리)
     const organization = (req.query.org as string) || "기관명 없음";
 
-    if (!center || !report) {
-        return res.status(404).json({ ok: false, message: "보고서 데이터를 찾을 수 없습니다." });
+    // ✅ 추가 1: 프론트엔드에서 보낸 workName 파라미터 받기
+    const inputWorkName = req.query.workName as string;
+    
+    // ✅ 수정 1: report가 없어도 에러를 띄우지 않고 통과하도록 변경
+    if (!center) {
+        return res.status(404).json({ ok: false, message: "경로당 데이터를 찾을 수 없습니다." });
     }
-    const formattedWorkDate = report.workDate 
-        ? new Date(report.workDate as any).toISOString().split('T')[0].replace(/-/g, '.')
-        : "-";
+
+    // ✅ 추가 2: 넘어온 작업자 이름이 있으면 DB 업데이트, 없으면 기존 DB 값이나 "작업자" 사용
+    let finalWorkerName = center.workName || "작업자"; // 기존 값이 있으면 사용
+
+    if (inputWorkName && inputWorkName.trim() !== "") {
+        finalWorkerName = inputWorkName;
+        // DB(SeniorCenterCleanUp)의 workName 필드 업데이트
+        await center.update({ workName: finalWorkerName });
+    }
+
+   // ✅ 수정: 무조건 오늘 날짜(한국 서버 기준)로 고정 (YYYY.MM.DD 포맷)
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const formattedWorkDate = `${year}.${month}.${day}`;
+
     // 2. PDF 파라미터 구성
     const pdfParams = {
       title: `${category === "AIR_CONDITIONER" ? "에어컨" : "공기청정기"} 세척 작업보고서`,
@@ -124,10 +144,11 @@ router.get("/:id/reports/:category/pdf", async (req: Request, res: Response) => 
       companyAddress: "부산광역시 해운대구 신반송로 151, 106호",
       companyPhone: "051-545-1150",
       ceoName: "김남관",
-      workDate: formattedWorkDate, // ✅ 이제 string 타입이므로 에러가 발생하지 않습니다.
-      workerName: "작업자",
+      workDate: formattedWorkDate,
+      workerName:finalWorkerName,
       address: center.roadAddress,
-      photos: {
+      // ✅ 수정 3: report가 존재할 때만 매핑하고, 없으면 빈 객체({})를 전달
+      photos: report ? {
         entranceImage: report.entranceImage,
         workImage1: report.workImage1,
         workImage2: report.workImage2,
@@ -135,14 +156,15 @@ router.get("/:id/reports/:category/pdf", async (req: Request, res: Response) => 
         afterImage1: report.afterImage1,
         beforeImage2: report.beforeImage2,
         afterImage2: report.afterImage2,
-      }
+      } : {}
     };
 
     // 3. PDF 버퍼 생성
     const pdfBuffer = await createSeniorCenterReportPdfBuffer(pdfParams);
 
     // 4. 파일명 설정 및 전송
-    const fileName = `${center.name}_${category}_작업보고서.pdf`;
+    const fileName = `${organization}_${center.name}_${category}_작업보고서.pdf`;
+   
     
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
