@@ -5,8 +5,8 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SeniorCenterCleanUp, SeniorCenterReport } from "../models";
 import { createSeniorCenterReportPdfBuffer } from "../services/createSeniorCenterReportPdf";
 import { encodeRFC5987ValueChars } from "../utils/fileName";
+import sharp from "sharp"; // ✅ sharp 임포트
 const router = Router();
-
 // S3 설정
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -33,7 +33,7 @@ router.put(
     console.log('업로드 중');
     try {
       const { centerId, category } = req.params;
-      const { fieldName } = req.body; // entranceImage, workImage1 등
+      const { fieldName } = req.body; 
       const file = req.file;
 
       if (!file) {
@@ -44,7 +44,19 @@ router.put(
         return res.status(400).json({ ok: false, message: "필드명(fieldName)이 누락되었습니다." });
       }
 
-      // 1. 해당 경로당의 카테고리별 보고서 레코드가 있는지 확인 (없으면 생성)
+      // ✅ 1. Sharp를 사용한 이미지 리사이징 및 압축
+      let processedBuffer: Buffer;
+      try {
+        processedBuffer = await sharp(file.buffer)
+          .rotate() // ✅ 추가: EXIF 메타데이터를 읽어서 사진을 똑바로 세워줌 (반드시 resize 전에 작성)
+          .resize({ width: 1024, withoutEnlargement: true }) // 가로 1024px
+          .jpeg({ quality: 80 }) // JPEG 형식 및 품질 80% 압축
+          .toBuffer();
+      } catch (err) {
+        console.error("Image Resizing Error:", err);
+        return res.status(500).json({ ok: false, message: "이미지 처리 중 오류가 발생했습니다." });
+      }
+      // 2. 해당 경로당의 카테고리별 보고서 레코드가 있는지 확인 (없으면 생성)
       let report = await SeniorCenterReport.findOne({
         where: { centerId: Number(centerId), category }
       });
@@ -57,23 +69,22 @@ router.put(
         });
       }
 
-      // 2. S3 업로드 설정
-      const fileExtension = file.originalname.split(".").pop();
-      const s3Key = `senior-reports/${centerId}/${category}/${crypto.randomUUID()}.${fileExtension}`;
+      // 3. S3 업로드 설정
+      // ✅ Sharp로 JPEG 변환을 강제했으므로, 확장자와 ContentType을 jpg/jpeg로 고정합니다.
+      const s3Key = `senior-reports/${centerId}/${category}/${crypto.randomUUID()}.jpg`;
 
       const uploadParams = {
         Bucket: process.env.AWS_S3_BUCKET!,
         Key: s3Key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
+        Body: processedBuffer, // ✅ 원본 file.buffer 대신 리사이징된 버퍼 사용
+        ContentType: "image/jpeg",
       };
 
-      // 3. S3에 파일 전송
+      // 4. S3에 파일 전송
       await s3.send(new PutObjectCommand(uploadParams));
       const imageUrl = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
 
-      // 4. 데이터베이스 업데이트 (전달받은 fieldName 컬럼에 URL 저장)
-      // 예: entranceImage, beforeImage1 등
+      // 5. 데이터베이스 업데이트 (전달받은 fieldName 컬럼에 URL 저장)
       await report.update({
         [fieldName]: imageUrl
       });

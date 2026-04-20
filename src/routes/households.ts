@@ -6,7 +6,9 @@ import fs from "fs";
 import path from "path";
 import { sequelize } from "../db/sequelize";
 import multerS3 from "multer-s3";
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, S3Client,PutObjectCommand } from "@aws-sdk/client-s3";
+// ✅ sharp 추가
+import sharp from "sharp";
 const s3 = new S3Client({
   region: process.env.AWS_REGION, // 예: 'ap-northeast-2'
   credentials: {
@@ -56,14 +58,43 @@ const upload = multer({
   fileFilter: fileFilter,
   limits: { fileSize: 50 * 1024 * 1024 },
 });
-
-const photoUpload = upload.fields([
+// ✅ 1. Sharp 가공을 위해 파일을 메모리에 임시 저장하는 Multer 설정
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: fileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+});
+const memoryPhotoUpload = memoryUpload.fields([
   { name: "addressImage", maxCount: 1 },
   { name: "beforeImage", maxCount: 1 },
   { name: "duringImage", maxCount: 1 },
   { name: "afterImage", maxCount: 1 },
 ]);
+// ✅ 2. 이미지 가공 및 S3 수동 업로드 헬퍼 함수
+async function processAndUploadImage(file: Express.Multer.File): Promise<string | null> {
+  if (!file) return null;
 
+  // sharp로 EXIF 회전 복구(.rotate) 및 1024px 리사이징 후 JPEG 압축
+  const processedBuffer = await sharp(file.buffer)
+    .rotate() // 눕는 현상 방지
+    .resize({ width: 1024, withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  const ext = ".jpg"; // 강제 변환했으므로 .jpg 통일
+  const baseName = path.basename(file.originalname, path.extname(file.originalname));
+  const safeBaseName = baseName.replace(/[^a-zA-Z0-9가-힣_-]/g, "_");
+  const s3Key = `uploads/zerovapp/${Date.now()}_${Math.round(Math.random() * 1e9)}_${safeBaseName}${ext}`;
+
+  await s3.send(new PutObjectCommand({
+    Bucket: process.env.AWS_S3_BUCKET!,
+    Key: s3Key,
+    Body: processedBuffer,
+    ContentType: "image/jpeg",
+  }));
+
+  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+}
 function toPublicPath(file?: any) {
   if (!file) return null;
   // S3 업로드 시에는 file.location에 전체 URL이 담겨 있습니다.
@@ -163,7 +194,8 @@ router.get("/list", async (req: Request, res: Response) => {
 router.put("/:id/photos", (req: Request, res: Response) => {
   console.log("사진 업로드 요청 도착:", req.method, req.originalUrl);
 
-  photoUpload(req, res, async (uploadErr: any) => {
+  // ✅ 기존 photoUpload 대신 메모리 버퍼를 사용하는 memoryPhotoUpload로 변경
+  memoryPhotoUpload(req, res, async (uploadErr: any) => {
     try {
       if (uploadErr) {
         console.error("multer 업로드 에러:", uploadErr);
@@ -172,8 +204,6 @@ router.put("/:id/photos", (req: Request, res: Response) => {
           error: uploadErr?.message ?? String(uploadErr),
         });
       }
-
-      console.log("req.files:", req.files);
 
       const id = Number(req.params.id);
 
@@ -187,11 +217,7 @@ router.put("/:id/photos", (req: Request, res: Response) => {
         return res.status(404).json({ message: "household not found" });
       }
 
-      const files = req.files as
-        | {
-          [fieldname: string]: Express.Multer.File[];
-        }
-        | undefined;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
 
       const addressImageFile = files?.addressImage?.[0];
       const beforeImageFile = files?.beforeImage?.[0];
@@ -204,17 +230,23 @@ router.put("/:id/photos", (req: Request, res: Response) => {
         });
       }
 
-      // 기존 파일 삭제 (비동기 처리)
-      if (addressImageFile && item.addressImage) await deleteOldFile(item.addressImage);
-      if (beforeImageFile && item.beforeImage) await deleteOldFile(item.beforeImage);
-      if (duringImageFile && item.duringImage) await deleteOldFile(item.duringImage);
-      if (afterImageFile && item.afterImage) await deleteOldFile(item.afterImage);
+      // ✅ 파일 가공 및 S3 업로드 대기
+      const newAddressUrl = addressImageFile ? await processAndUploadImage(addressImageFile) : null;
+      const newBeforeUrl = beforeImageFile ? await processAndUploadImage(beforeImageFile) : null;
+      const newDuringUrl = duringImageFile ? await processAndUploadImage(duringImageFile) : null;
+      const newAfterUrl = afterImageFile ? await processAndUploadImage(afterImageFile) : null;
 
-      // DB 경로 업데이트 (toPublicPath가 이제 location을 반환함)
-      if (addressImageFile) item.addressImage = toPublicPath(addressImageFile);
-      if (beforeImageFile) item.beforeImage = toPublicPath(beforeImageFile);
-      if (duringImageFile) item.duringImage = toPublicPath(duringImageFile);
-      if (afterImageFile) item.afterImage = toPublicPath(afterImageFile);
+      // 기존 파일 삭제 (비동기 처리)
+      if (newAddressUrl && item.addressImage) await deleteOldFile(item.addressImage);
+      if (newBeforeUrl && item.beforeImage) await deleteOldFile(item.beforeImage);
+      if (newDuringUrl && item.duringImage) await deleteOldFile(item.duringImage);
+      if (newAfterUrl && item.afterImage) await deleteOldFile(item.afterImage);
+
+      // DB 경로 업데이트 (헬퍼 함수에서 반환된 URL을 그대로 저장)
+      if (newAddressUrl) item.addressImage = newAddressUrl;
+      if (newBeforeUrl) item.beforeImage = newBeforeUrl;
+      if (newDuringUrl) item.duringImage = newDuringUrl;
+      if (newAfterUrl) item.afterImage = newAfterUrl;
 
       await item.save();
 
