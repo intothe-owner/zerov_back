@@ -186,4 +186,84 @@ router.delete("/:id", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * 5. 경로당 정보 등록 (신규 생성)
+ */
+router.post("/", async (req: Request, res: Response) => {
+  const tx = await sequelize.transaction();
+  try {
+    const {
+      name,
+      dong,
+      roadAddress,
+      detailAddress,
+      lat,
+      lng,
+      area,
+      acCeiling,
+      acStand,
+      acWall,
+      airPurifier,
+      managerName,
+      managerPhone,
+      remark,
+    } = req.body;
+
+    // 1. 필수 값 검증
+    if (!name || !roadAddress) {
+      await tx.rollback();
+      return res.status(400).json({ ok: false, message: "경로당명과 주소는 필수 입력 항목입니다." });
+    }
+
+    // 2. 주소 병합 (도로명 주소 + 상세 주소)
+    const fullAddress = detailAddress ? `${roadAddress} ${detailAddress}` : roadAddress;
+
+    // 3. seq (연번) 자동 채번 로직 (가장 큰 seq 값을 찾아 +1 적용)
+    // DB에서 auto_increment를 사용 중이라면 이 부분은 생략하고 새 객체에서 seq 속성을 지워도 무방합니다.
+    const maxSeqCenter = await SeniorCenterCleanUp.findOne({
+      order: [['seq', 'DESC']],
+      attributes: ['seq'],
+      transaction: tx,
+    });
+    const nextSeq = maxSeqCenter?.seq ? maxSeqCenter.seq + 1 : 1;
+
+    // 4. DB에 저장할 데이터 객체 구성 (프론트 필드 -> DB 컬럼 매핑)
+    const newCenterData = {
+      programYear: new Date().getFullYear(), // 현재 연도로 기본 세팅
+      seq: nextSeq,
+      name,
+      dong: dong || null,
+      roadAddress: fullAddress,
+      // lat: lat ? String(lat) : null,  // DB에 lat, lng 컬럼이 있다면 주석 해제
+      // lng: lng ? String(lng) : null,
+      area: area ? Number(area) : null,
+      acCeilingCount: Number(acCeiling) || 0,
+      acStandCount: Number(acStand) || 0,
+      acWallCount: Number(acWall) || 0,
+      airPurifierCount: Number(airPurifier) || 0,
+      managerName: managerName || null,
+      managerPhone: managerPhone || null,
+      remark: remark || null,
+      isComplete: false, // 신규 등록 시 기본값
+      isArchive: false,  // 신규 등록 시 기본값
+      isCancel:false
+    };
+
+    // 5. DB 생성 및 트랜잭션 커밋
+    const newCenter = await SeniorCenterCleanUp.create(newCenterData, { transaction: tx });
+    
+    await tx.commit();
+
+    return res.status(201).json({ 
+      ok: true, 
+      data: newCenter, 
+      message: "성공적으로 등록되었습니다." 
+    });
+
+  } catch (error) {
+    if (tx) await tx.rollback();
+    console.error("경로당 등록 에러:", error);
+    return res.status(500).json({ ok: false, message: "서버 오류로 인해 등록에 실패했습니다." });
+  }
+});
 export default router;
