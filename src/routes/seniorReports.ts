@@ -19,7 +19,7 @@ const s3 = new S3Client({
 // Multer 설정 (메모리 스토리지 사용)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB 제한
+  limits: { fileSize: 100 * 1024 * 1024 }, // 10MB 제한
 });
 
 /**

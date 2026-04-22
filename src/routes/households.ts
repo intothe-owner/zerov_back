@@ -62,7 +62,7 @@ const upload = multer({
 const memoryUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter: fileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 50MB
 });
 const memoryPhotoUpload = memoryUpload.fields([
   { name: "addressImage", maxCount: 1 },
